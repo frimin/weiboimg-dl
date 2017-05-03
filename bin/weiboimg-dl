@@ -1,0 +1,75 @@
+#!/usr/bin/env node
+var content = require('../lib/weibo_content');
+var async = require('async');
+var fs = require('fs');
+var http = require('http');
+
+function startDownload(url, filename, callback) {
+    var wstream = fs.createWriteStream(filename);
+
+    var req = http.request(url, function(res) {
+        res.pipe(wstream)
+        res.on('end', () => { callback(null) });
+        res.on('error', (err) => { callback(null) });
+    })
+
+    req.on('error', (err) => { callback(err) })
+
+    req.end()
+}
+
+function makeTask(filename, img) {
+    return (callback) => {
+        fs.exists(filename, (exists) => {
+            if (exists) {
+                console.log('file exists: ' + filename)
+                callback(null);
+                return;
+            }
+            startDownload(img[0], filename + '.dl', (err) => {
+                if (err) { callback(err); return; }
+
+                fs.rename(filename + '.dl', filename, (err) => {
+                    if (err) { callback(err); return; }
+
+                    fs.utimes(filename, img[1]['time'], img[1]['time'], (err) => {
+                        if (err) { callback(err); return; }
+
+                        console.log('download ok: ' + filename)
+                        callback(null)
+                    })
+                })
+            })
+        });
+    }
+}
+
+content.requestWeiboContent('test', (err, content) => {
+    function pageHandler(err, content) {
+        if (content.done) {
+            console.log('page end')
+            process.exit(0)
+        }
+
+        var imgs = content.popImages()
+
+        console.log(`page ${content.page}, imgs: ${imgs.length}`)
+
+        var downloadTask = []
+
+        for(var i = 0; i != imgs.length; i++) {
+            var filename = imgs[i][0].split('/')
+            filename = filename[filename.length - 1]
+            downloadTask.push(makeTask(filename, imgs[i]))
+            //break;
+        }
+
+        async.parallelLimit(downloadTask, 3, (err, results) => {
+            setTimeout(() => {
+                content.nextPage(pageHandler)
+            }, 1000)
+        })
+    }
+
+    content.nextPage(pageHandler)
+})
