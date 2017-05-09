@@ -1,0 +1,31 @@
+{
+  "name": "weiboimg-dl",
+  "version": "0.1.0",
+  "description": "Weibo image download tool",
+  "main": "index.js",
+  "dependencies": {
+    "async": "^2.1.4",
+    "minimist": "^1.2.0"
+  },
+  "directories": {
+      "bin": "./bin",
+      "lib": "./lib"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo 'no test'; exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://frimin@github.com/frimin/weiboimg-dl.git"
+  },
+  "keywords": [
+    "weibo"
+  ],
+  "author": "frimin",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/frimin/weiboimg-dl/issues"
+  },
+  "homepage": "https://github.com/frimin/weiboimg-dl#readme"
+}

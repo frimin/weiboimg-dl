@@ -1,28 +1,39 @@
 #!/usr/bin/env node
+
+var parseArgs = require('minimist');
 var content = require('../lib/weibo_content');
 var async = require('async');
 var fs = require('fs');
 var http = require('http');
 
+function showHelp() {
+    console.log("\
+usage:  weiboimg-dl <nickname> ... \n\
+\n\
+OPTIONS: \n\
+    --help          show this message\n\
+")
+}
+
 function startDownload(url, filename, callback) {
     var wstream = fs.createWriteStream(filename);
 
     var req = http.request(url, function(res) {
-        res.pipe(wstream)
-        res.on('end', () => { callback(null) });
-        res.on('error', (err) => { callback(null) });
+        res.pipe(wstream);
+        res.on('end', () => { callback(null); });
+        res.on('error', (err) => { callback(err); });
     })
 
-    req.on('error', (err) => { callback(err) })
+    req.on('error', (err) => { callback(err); });
 
-    req.end()
+    req.end();
 }
 
 function makeTask(filename, img) {
     return (callback) => {
         fs.exists(filename, (exists) => {
             if (exists) {
-                console.log('file exists: ' + filename)
+                console.log('file exists: ' + filename);
                 callback(null);
                 return;
             }
@@ -35,7 +46,7 @@ function makeTask(filename, img) {
                     fs.utimes(filename, img[1]['time'], img[1]['time'], (err) => {
                         if (err) { callback(err); return; }
 
-                        console.log('download ok: ' + filename)
+                        console.log('image download: ' + filename)
                         callback(null)
                     })
                 })
@@ -44,32 +55,75 @@ function makeTask(filename, img) {
     }
 }
 
-content.requestWeiboContent('test', (err, content) => {
-    function pageHandler(err, content) {
-        if (content.done) {
-            console.log('page end')
-            process.exit(0)
-        }
+function createDirIfNeed(path, callback) {
+    fs.access(path, fs.constants.X_OK | fs.constants.W_OK, (err) => {
+        if (err) {
+            if (err.errno == -2) {
+                fs.mkdir(path, (err) => {
+                    if (err) { callback(err); return; }
+                    callback();
+                });
+                return;
+            } else  {
+                callback(err);
+            }
+         } else {
+             callback();
+         }
+    });
+}
 
-        var imgs = content.popImages()
+var pArgs = parseArgs(process.argv);
 
-        console.log(`page ${content.page}, imgs: ${imgs.length}`)
+pArgs['_'].splice(0, 2);
 
-        var downloadTask = []
+var args = pArgs['_']; delete pArgs['_'];
+var options = pArgs;
 
-        for(var i = 0; i != imgs.length; i++) {
-            var filename = imgs[i][0].split('/')
-            filename = filename[filename.length - 1]
-            downloadTask.push(makeTask(filename, imgs[i]))
-            //break;
-        }
+if (options['help']) {
+    showHelp()
+    process.exit(0)
+}
 
-        async.parallelLimit(downloadTask, 3, (err, results) => {
-            setTimeout(() => {
-                content.nextPage(pageHandler)
-            }, 1000)
-        })
-    }
+async.eachOfSeries(args, function (nickname, index, callback) {
+    createDirIfNeed(nickname, (err) => {
+        if (err) { callback(err); return; }
 
-    content.nextPage(pageHandler)
-})
+        console.log('start download: ' + nickname)
+
+        content.requestWeiboContent(nickname, (err, content) => {
+            function pageHandler(err, content) {
+                if (err) { callback(err); return; }
+
+                if (content.done) {
+                    console.log('download finish : ' + nickname)
+                    callback();
+                    return;
+                }
+
+                var imgs = content.popImages()
+
+                console.log(`page ${content.page}, images: ${imgs.length}`)
+
+                var downloadTask = []
+
+                for(var i = 0; i != imgs.length; i++) {
+                    var filename = imgs[i][0].split('/')
+                    filename = nickname + '/' + filename[filename.length - 1]
+                    downloadTask.push(makeTask(filename, imgs[i]))
+                }
+
+                async.parallelLimit(downloadTask, 3, (err, results) => {
+                    setTimeout(() => {
+                        content.nextPage(pageHandler) 
+                    }, 100)
+                })
+            }
+
+            content.nextPage(pageHandler);
+        });
+    })
+}, function (err) {
+    if (err) console.error(err.message);
+    process.exit(0)
+});
